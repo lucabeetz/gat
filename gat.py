@@ -13,17 +13,29 @@ class GAT(hk.Module):
         self.dropout = dropout
 
     def __call__(self, x):
-        pass
+        layers = []
+        for i in range(self.num_layers):
+            layer = GATLayer(
+                num_heads=self.num_heads[i],
+                num_features=self.num_features[i],
+                dropout=self.dropout
+            )
+
+            layers.append(layer)
+
+        gat_net = hk.Sequential(*layers)
+
+        gat_net(x)
 
 
 class GATLayer(hk.Module):
-    def __init__(self, num_heads, num_out_features, dropout, name=None):
+    def __init__(self, num_heads, num_features, dropout, name=None):
         super().__init__(name=name)
         self.num_heads = num_heads
-        self.num_out_features = num_out_features
+        self.num_features = num_features
         self.dropout = dropout
 
-        self.linear_projection = hk.Linear(self.num_heads * self.num_out_features)
+        self.linear_projection = hk.Linear(self.num_heads * self.num_features)
 
         # Create initializer for attention weight vectors
         initializer = hk.initializers.VarianceScaling(1.0, "fan_avg", "uniform")
