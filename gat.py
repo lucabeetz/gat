@@ -12,7 +12,7 @@ class GAT(hk.Module):
 
         self.dropout = dropout
 
-    def __call__(self, x):
+    def __call__(self, node_features, connectivity_mask):
         layers = []
         for i in range(self.num_layers):
             layer = GATLayer(
@@ -23,9 +23,9 @@ class GAT(hk.Module):
 
             layers.append(layer)
 
-        gat_net = hk.Sequential(*layers)
+        gat_net = hk.Sequential(layers)
 
-        gat_net(x)
+        return gat_net((node_features, connectivity_mask))
 
 
 class GATLayer(hk.Module):
@@ -43,17 +43,19 @@ class GATLayer(hk.Module):
         # Initialize attention weight vectors
         self.scoring_weight_source = hk.get_parameter(
             "scoring_weight_source",
-            (self.num_heads, self.num_out_features, 1),
+            (1, self.num_heads, self.num_features),
             init=initializer)
         self.scoring_weight_target = hk.get_parameter(
             "scoring_weight_target",
-            (self.num_heads, self.num_out_features, 1),
+            (1, self.num_heads, self.num_features),
             init=initializer)
 
-    def __call__(self, nodes_features, connectivity_mask):
+    def __call__(self, x):
         """
         nodes_features: (N, FIN) 
         """
+
+        nodes_features, connectivity_mask = x
 
         # Step 1: Linear projection
 
@@ -63,7 +65,7 @@ class GATLayer(hk.Module):
         # Apply linear transformation
         # (N, FIN) * (FIN, NH * FOUT) -> (N, NH, FOUT)
         nodes_features_proj = self.linear_projection(
-            nodes_features).reshape(-1, self.num_heads, self.num_out_features)
+            nodes_features).reshape(-1, self.num_heads, self.num_features)
 
         # Apply dropout to projected nodes_features
         nodes_features_proj = hk.dropout(hk.next_rng_key(), self.dropout, nodes_features_proj)
@@ -76,8 +78,8 @@ class GATLayer(hk.Module):
 
         # Shape source: (N, NH, 1) -> (NH, N, 1)
         # Shape target: (N, NH, 1) -> (NH, 1, N)
-        scores_source = scores_source.tranpose(0, 1)
-        scores_target = scores_target.permute(1, 2, 0)
+        scores_source = jnp.transpose(scores_source, (1, 0, 2))
+        scores_target = jnp.transpose(scores_target, (1, 2, 0))
 
         scores = jax.nn.leaky_relu(scores_source + scores_target, negative_slope=0.2)
 
@@ -86,11 +88,13 @@ class GATLayer(hk.Module):
         # Step 3: Neighbourhood aggregation
 
         # Shape: (NH, N, N) * (NH, N, FOUT) -> (NH, N, FOUT)
-        nodes_features_out = jnp.matmul(attention_coefficients, nodes_features_proj.tranpose(0, 1))
+        nodes_features_out = jnp.matmul(attention_coefficients, jnp.transpose(nodes_features_proj, (1, 0, 2)))
 
-        nodes_features_out = nodes_features_out.permute(1, 0, 2)
+        nodes_features_out = jnp.transpose(nodes_features_out, (1, 0, 2))
 
         # Step 4: Concatenation
 
         # Shape: (NH, N, FOUT) -> (N, NH * FOUT)
-        nodes_features_out = nodes_features_out.view(-1, self.num_heads * self.num_out_features)
+        nodes_features_out = nodes_features_out.reshape(-1, self.num_heads * self.num_features)
+
+        return nodes_features_out, connectivity_mask
