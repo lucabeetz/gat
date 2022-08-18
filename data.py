@@ -13,12 +13,17 @@ def get_cora_dataset():
 
     adj_matrix = jnp.array(tg.utils.to_dense_adj(data.edge_index).squeeze())
 
-    # Add self connections
+    # Add self connections to adj matrix and create connectivity_mask for attention mechanism
     adj_matrix = adj_matrix + jnp.identity(len(adj_matrix))
     connectivity_mask = (adj_matrix == 0) * -jnp.inf
 
+    # Normalise embeddings
+    nodes_features = jnp.array(data.x)
+    nodes_features_sum_inv = jnp.power(nodes_features.sum(-1), -1)
+    nodes_features_normalized = jnp.diag(nodes_features_sum_inv).dot(nodes_features)
+
     return (
-        jnp.array(data.x),
+        nodes_features_normalized,
         connectivity_mask,
         jnp.array(data.y),
         np.arange(*CORA_TRAIN_RANGE),

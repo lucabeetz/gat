@@ -12,13 +12,13 @@ class GAT(hk.Module):
 
         self.dropout = dropout
 
-    def __call__(self, node_features, connectivity_mask):
+    def __call__(self, node_features, connectivity_mask, is_training):
         layers = []
         for i in range(self.num_layers):
             layer = GATLayer(
                 num_heads=self.num_heads[i],
                 num_features=self.num_features[i],
-                dropout=self.dropout
+                dropout=self.dropout if is_training else 0
             )
 
             layers.append(layer)
