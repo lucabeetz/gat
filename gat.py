@@ -12,13 +12,14 @@ class GAT(hk.Module):
 
         self.dropout = dropout
 
-    def __call__(self, node_features, connectivity_mask, is_training):
+    def __call__(self, node_features, connectivity_mask, is_training=True, return_att_coeffs=False):
         layers = []
         for i in range(self.num_layers):
             layer = GATLayer(
                 num_heads=self.num_heads[i],
                 num_features=self.num_features[i],
-                dropout=self.dropout if is_training else 0
+                dropout=self.dropout if is_training else 0,
+                return_att_coeffs=return_att_coeffs
             )
 
             layers.append(layer)
@@ -29,11 +30,12 @@ class GAT(hk.Module):
 
 
 class GATLayer(hk.Module):
-    def __init__(self, num_heads, num_features, dropout, name=None):
+    def __init__(self, num_heads, num_features, dropout, return_att_coeffs=False, name=None):
         super().__init__(name=name)
         self.num_heads = num_heads
         self.num_features = num_features
         self.dropout = dropout
+        self.return_att_scores = return_att_coeffs
 
         self.linear_projection = hk.Linear(self.num_heads * self.num_features)
 
@@ -55,7 +57,7 @@ class GATLayer(hk.Module):
         nodes_features: (N, FIN) 
         """
 
-        nodes_features, connectivity_mask = x
+        nodes_features, connectivity_mask, *all_att_coeffs = x
 
         # Step 1: Linear projection
 
@@ -97,4 +99,7 @@ class GATLayer(hk.Module):
         # Shape: (NH, N, FOUT) -> (N, NH * FOUT)
         nodes_features_out = nodes_features_out.reshape(-1, self.num_heads * self.num_features)
 
-        return nodes_features_out, connectivity_mask
+        if self.return_att_scores:
+            return nodes_features_out, connectivity_mask, *all_att_coeffs, attention_coefficients
+        else:
+            return nodes_features_out, connectivity_mask
