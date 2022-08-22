@@ -3,7 +3,6 @@ import optax
 import haiku as hk
 import numpy as np
 import jax.numpy as jnp
-import torch_geometric as tg
 from typing import NamedTuple
 from absl import app
 from data import get_cora_dataset
